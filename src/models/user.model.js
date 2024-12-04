@@ -85,4 +85,38 @@ const userSchema = new Schema({
     }
 },{timestamps: true})
 
+// Email OTP generation
+const MAX_LIMIT = 3;                        // maximum number of OTP request allow in 24 hours 
+const OTP_REQUEST_TIMEOUT = 30 * 1000;      // 30 sec (time between OTP request)
+userSchema.methods.generateOTP = async function(){
+    const currentTime = Date.now();
+    const oneDay = 24 * 60 * 60 * 1000;
+
+    // Reset OTP request count after 24 hours 
+    if(this.otpLastRequest && currentTime - this.otpLastRequest.getTime() >= oneDay){
+        this.otpRequestCount = 0;
+    }
+
+    // Check if the user has reached the max OTP request limit for the day
+    if(this.otpRequestCount > MAX_LIMIT){
+        throw new Error(429, "Maximum OTP request limit reached. Please try again later.");
+    }
+
+    // Check if the user is requesting OTP too soon after the last request
+    if(this.otpLastRequest && currentTime - this.otpLastRequest.getTime() < OTP_REQUEST_TIMEOUT){
+        throw new Error(429, "Please wait before requesting OTP again.");
+    }
+
+    // Generate the OTP and update request tracking 
+    const otp = crypto.randomBytes(3).toString("hex");  // generate 6 character hex OTP
+    const hashOTP = await bcrypt.hash(otp, 10); // hash OTP before save into database 
+    this.otp = hashOTP;
+    this.otpExpiry = Date.now() + 60 * 1000;    // OTP expiry time 
+    this.otpRequestCount += 1;
+    this.otpLastRequest = new Date();
+
+    await this.save()
+    return otp;
+}
+
 export const User = mongoose.model("User", userSchema)
