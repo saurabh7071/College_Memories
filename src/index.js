@@ -14,7 +14,7 @@ connectDB()
     })
 
     app.listen(process.env.PORT || 8800, ()=>{
-        console.log(`SERVER IS RUNNING ON PORT : ${process.env.PORT || 5500}`);
+        console.log(`SERVER IS RUNNING ON PORT : ${process.env.PORT || 8800}`);
     })
 })
 .catch((err)=>{
