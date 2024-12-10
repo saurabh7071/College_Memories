@@ -1,7 +1,7 @@
 import mongoose, {Schema} from "mongoose"
 import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken"
-// for generating OTP
+import crypto from "crypto"
 
 const userSchema = new Schema({
     fullname: {
@@ -16,7 +16,7 @@ const userSchema = new Schema({
         trim: true,
         unique: true,
         index: true,
-        lowercase: true
+        // lowercase: true
     },
     email: {
         type: String,
@@ -26,13 +26,13 @@ const userSchema = new Schema({
         lowercase: true,
         sparse: true    // Optional, unique, sparse ensures only one unique email
     },
-    phoneNumber: {
-        type: String,
-        required: true,
-        trim: true,
-        unique: true,
-        sparse: true    // Optional, unique, sparse ensures only one unique phone number
-    },
+    // phoneNumber: {
+    //     type: String,
+    //     // required: true,
+    //     trim: true,
+    //     unique: true,
+    //     sparse: true    // Optional, unique, sparse ensures only one unique phone number
+    // },
     password: {
         type: String,
         required: [true, 'Password is Required!!']
@@ -85,6 +85,47 @@ const userSchema = new Schema({
     }
 },{timestamps: true})
 
+// password encryption
+userSchema.pre("save", async function(next){
+    if(!this.isModified("password")) return next();
+
+    this.password = await bcrypt.hash(this.password, 10)
+    next()
+})
+
+// comparing password 
+userSchema.methods.comparePassword = async function(password){
+    return await bcrypt.compare(password, this.password)
+}
+
+// Access token
+userSchema.methods.generateAccessToken = function(){
+    return jwt.sign(
+        {
+            _id: this._id,
+            email: this.email,
+            username: this.username
+        },
+        process.env.ACCESS_TOKEN_SECRET,
+        {
+            expiresIn: process.env.ACCESS_TOKEN_EXPIRY
+        }
+    )
+}
+
+// Refresh Token
+userSchema.methods.generateRefreshToken = function(){
+    return jwt.sign(
+        {
+            _id: this._id,
+        },
+        process.env.REFRESH_TOKEN_SECRET,
+        {
+            expiresIn: process.env.REFRESH_TOKEN_EXPIRY
+        }
+    )
+}
+
 // Email OTP generation
 const MAX_LIMIT = 3;                        // maximum number of OTP request allow in 24 hours 
 const OTP_REQUEST_TIMEOUT = 30 * 1000;      // 30 sec (time between OTP request)
@@ -111,7 +152,7 @@ userSchema.methods.generateOTP = async function(){
     const otp = crypto.randomBytes(3).toString("hex");  // generate 6 character hex OTP
     const hashOTP = await bcrypt.hash(otp, 10); // hash OTP before save into database 
     this.otp = hashOTP;
-    this.otpExpiry = Date.now() + 60 * 1000;    // OTP expiry time 
+    this.otpExpiry = Date.now() + 60 * 2000;    // OTP expiry time 
     this.otpRequestCount += 1;
     this.otpLastRequest = new Date();
 
